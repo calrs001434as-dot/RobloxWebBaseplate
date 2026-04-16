@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blox Engine</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
+canvas { display: block; }
+
+/* Loading Screen */
+#loading-screen {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 10000; transition: opacity 0.5s;
+}
+#loading-screen h1 { color: #fff; font-size: 48px; margin-bottom: 30px; letter-spacing: 3px; }
+#loading-screen h1 span { color: #00b4ff; }
+.loading-bar-bg { width: 300px; height: 8px; background: rgba(255,255,255,0.15); border-radius: 4px; overflow: hidden; }
+.loading-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00b4ff, #00d4aa); border-radius: 4px; transition: width 0.3s; }
+#loading-text { color: rgba(255,255,255,0.6); margin-top: 15px; font-size: 14px; }
+
+/* Crosshair */
+#crosshair {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  width: 4px; height: 4px; background: rgba(255,255,255,0.5); border-radius: 50%;
+  pointer-events: none; z-index: 50; display: none;
+}
+
+/* Health Bar */
+#health-bar-container {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  width: 200px; height: 6px; background: rgba(0,0,0,0.4); border-radius: 3px;
+  z-index: 100; display: none;
+}
+#health-bar-fill { width: 100%; height: 100%; background: #00d444; border-radius: 3px; }
+
+/* ===== ROBLOX CHAT UI - TOP LEFT ===== */
+#chat-container {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  width: 330px;
+  z-index: 200;
+  font-family: 'Arial', sans-serif;
+  pointer-events: none;
+}
+#chat-log {
+  width: 100%;
+  max-height: 200px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-bottom: 2px;
+}
+.chat-msg {
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  line-height: 1.4;
+  word-break: break-word;
+  max-width: 100%;
+  transition: opacity 0.8s;
+  pointer-events: none;
+}
+.chat-msg .username {
+  font-weight: bold;
+}
+.chat-msg.system {
+  color: rgba(255,255,255,0.55);
+  font-style: italic;
+}
+/* Input row appears when chat is open */
+#chat-input-row {
+  display: none;
+  background: rgba(0, 0, 0, 0.78);
+  border: 2px solid #00A2FF;
+  border-radius: 4px;
+  margin-top: 3px;
+  padding: 0 8px;
+  height: 38px;
+  align-items: center;
+  pointer-events: all;
+}
+.chat-to {
+  color: rgba(255,255,255,0.55);
+  font-size: 13px;
+  font-weight: bold;
+  margin-right: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+#chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  min-width: 0;
+  font-family: 'Arial', sans-serif;
+}
+#chat-hint-bar {
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 4px;
+  padding: 4px 10px;
+  margin-top: 3px;
+  color: rgba(255,255,255,0.4);
+  font-size: 12px;
+  pointer-events: none;
+  display: block;
+}
+
+/* Backpack / Toolbar */
+#toolbar {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 4px; z-index: 100;
+}
+.toolbar-slot {
+  width: 56px; height: 56px; background: rgba(0,0,0,0.55);
+  border: 2px solid rgba(255,255,255,0.15); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.3); font-size: 11px; font-weight: 700;
+  position: relative;
+}
+.toolbar-slot .slot-num {
+  position: absolute; top: 2px; left: 5px; font-size: 10px;
+  color: rgba(255,255,255,0.4);
+}
+
+/* Player List (Tab) */
+#player-list {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  background: rgba(20,20,30,0.92); border-radius: 12px; padding: 20px;
+  min-width: 400px; z-index: 300; display: none;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+#player-list h2 { color: #fff; font-size: 16px; margin-bottom: 12px; text-align: center; }
+.player-row {
+  display: flex; justify-content: space-between; padding: 8px 12px;
+  color: #fff; font-size: 14px; background: rgba(255,255,255,0.05);
+  border-radius: 6px; margin-bottom: 4px;
+}
+
+/* Pause Menu */
+#pause-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7); z-index: 500; display: none;
+  backdrop-filter: blur(8px);
+}
+#pause-menu {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  background: linear-gradient(180deg, #2d2d3d, #1e1e2e); border-radius: 12px;
+  width: 480px; max-height: 80vh; overflow-y: auto; z-index: 501; display: none;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.08);
+}
+#pause-menu-header {
+  padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.08);
+  display: flex; justify-content: space-between; align-items: center;
+}
+#pause-menu-header h2 { color: #fff; font-size: 20px; }
+#pause-close-btn {
+  width: 32px; height: 32px; border-radius: 8px; border: none;
+  background: rgba(255,255,255,0.1); color: #fff; font-size: 18px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+#pause-close-btn:hover { background: rgba(255,60,60,0.4); }
+.pause-tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.pause-tab {
+  flex: 1; padding: 12px; text-align: center; color: rgba(255,255,255,0.5);
+  font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: none;
+  border-bottom: 2px solid transparent; transition: all 0.2s;
+}
+.pause-tab:hover { color: rgba(255,255,255,0.8); }
+.pause-tab.active { color: #00b4ff; border-bottom-color: #00b4ff; }
+.pause-content { padding: 20px 24px; }
+.pause-section { display: none; }
+.pause-section.active { display: block; }
+.setting-group { margin-bottom: 20px; }
+.setting-group-title {
+  color: rgba(255,255,255,0.4); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 10px;
+}
+.setting-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.setting-label { color: rgba(255,255,255,0.8); font-size: 14px; }
+.setting-value { color: rgba(255,255,255,0.5); font-size: 13px; }
+.toggle {
+  width: 44px; height: 24px; background: rgba(255,255,255,0.15);
+  border-radius: 12px; cursor: pointer; position: relative; transition: background 0.3s;
+}
+.toggle.on { background: #00b4ff; }
+.toggle::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; background: #fff; border-radius: 50%;
+  transition: transform 0.3s;
+}
+.toggle.on::after { transform: translateX(20px); }
+.slider-container { display: flex; align-items: center; gap: 10px; }
+.slider {
+  -webkit-appearance: none; width: 120px; height: 4px;
+  background: rgba(255,255,255,0.2); border-radius: 2px; outline: none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px;
+  background: #00b4ff; border-radius: 50%; cursor: pointer;
+}
+.pause-btn {
+  width: 100%; padding: 12px; margin: 6px 0; border-radius: 8px;
+  border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.pause-btn-resume { background: #00b4ff; color: #fff; }
+.pause-btn-resume:hover { background: #0099dd; }
+.pause-btn-leave { background: rgba(255,60,60,0.2); color: #ff4444; }
+.pause-btn-leave:hover { background: rgba(255,60,60,0.35); }
+
+/* FPS counter */
+#fps-counter {
+  position: fixed; top: 10px; right: 10px; color: rgba(255,255,255,0.4);
+  font-size: 11px; z-index: 100; font-family: monospace;
+}
+
+/* Shift lock icon */
+#shift-lock-icon {
+  position: fixed; bottom: 90px; right: 20px;
+  width: 40px; height: 40px; background: rgba(0,0,0,0.5);
+  border: 2px solid rgba(255,255,255,0.15); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.4); font-size: 18px; z-index: 100; cursor: pointer;
+}
+#shift-lock-icon.active { border-color: #00b4ff; color: #00b4ff; }
+
+/* Camera mode indicator */
+#camera-mode {
+  position: fixed; bottom: 90px; right: 70px;
+  padding: 6px 12px; background: rgba(0,0,0,0.5);
+  border-radius: 6px; color: rgba(255,255,255,0.4); font-size: 11px; z-index: 100;
+}
+
+/* Username top-right */
+#username-display {
+  position: fixed; top: 10px; right: 60px; color: rgba(255,255,255,0.6);
+  font-size: 12px; z-index: 100;
+}
+
+/* Camera mode select styling */
+#camera-mode-select {
+  background: #333 !important;
+  color: #fff !important;
+  border: 1px solid #555 !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  cursor: pointer;
+}
+#camera-mode-select option {
+  background: #222;
+  color: #fff;
+}
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <h1>BLOX <span>ENGINE</span></h1>
+  <div class="loading-bar-bg"><div class="loading-bar-fill" id="loading-fill"></div></div>
+  <div id="loading-text">Loading assets...</div>
+</div>
+
+<div id="crosshair">●</div>
+<div id="health-bar-container"><div id="health-bar-fill"></div></div>
+<div id="username-display">Player</div>
+<div id="fps-counter">60 FPS</div>
+<div id="camera-mode">3rd Person</div>
+
+<div id="chat-container">
+  <div id="chat-log"></div>
+  <div id="chat-input-row">
+    <span class="chat-to">To All</span>
+    <input id="chat-input" type="text" placeholder="Type a message and press Enter to chat" maxlength="200" autocomplete="off">
+  </div>
+  <span id="chat-hint-bar">Press / to chat</span>
+</div>
+
+<div id="toolbar"></div>
+
+<div id="shift-lock-icon" title="Shift Lock (Shift)">🔒</div>
+
+<div id="player-list">
+  <h2>Players</h2>
+  <div id="player-list-rows"></div>
+</div>
+
+<div id="pause-overlay"></div>
+<div id="pause-menu">
+  <div id="pause-menu-header">
+    <h2>☰ Menu</h2>
+    <button id="pause-close-btn">✕</button>
+  </div>
+  <div class="pause-tabs">
+    <button class="pause-tab active" data-tab="settings">Settings</button>
+    <button class="pause-tab" data-tab="controls">Controls</button>
+    <button class="pause-tab" data-tab="about">About</button>
+  </div>
+  <div class="pause-content">
+    <div class="pause-section active" id="tab-settings">
+      <div class="setting-group">
+        <div class="setting-group-title">Camera</div>
+        <div class="setting-row">
+          <span class="setting-label">Camera Sensitivity</span>
+          <div class="slider-container">
+            <input type="range" class="slider" id="sensitivity-slider" min="1" max="10" value="5">
+            <span class="setting-value" id="sensitivity-value">5</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Camera Mode</span>
+          <div class="slider-container">
+            <select id="camera-mode-select" style="background:#333;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">
+              <option value="third">Third Person</option>
+              <option value="first">First Person</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Zoom Distance</span>
+          <div class="slider-container">
+            <input type="range" class="slider" id="zoom-slider" min="2" max="20" value="10">
+            <span class="setting-value" id="zoom-value">10</span>
+          </div>
+        </div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-group-title">Graphics</div>
+        <div class="setting-row">
+          <span class="setting-label">Shadows</span>
+          <div class="toggle on" id="toggle-shadows"></div>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Show FPS</span>
+          <div class="toggle on" id="toggle-fps"></div>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Field of View</span>
+          <div class="slider-container">
+            <input type="range" class="slider" id="fov-slider" min="50" max="120" value="70">
+            <span class="setting-value" id="fov-value">70</span>
+          </div>
+        </div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-group-title">Audio</div>
+        <div class="setting-row">
+          <span class="setting-label">Master Volume</span>
+          <div class="slider-container">
+            <input type="range" class="slider" id="volume-slider" min="0" max="100" value="80">
+            <span class="setting-value" id="volume-value">80</span>
+          </div>
+        </div>
+      </div>
+      <button class="pause-btn pause-btn-resume" id="btn-resume">Resume</button>
+      <button class="pause-btn pause-btn-leave" id="btn-leave">Leave Game</button>
+    </div>
+    <div class="pause-section" id="tab-controls">
+      <div class="setting-group">
+        <div class="setting-group-title">Movement</div>
+        <div class="setting-row"><span class="setting-label">Move Forward</span><span class="setting-value">W</span></div>
+        <div class="setting-row"><span class="setting-label">Move Left</span><span class="setting-value">A</span></div>
+        <div class="setting-row"><span class="setting-label">Move Backward</span><span class="setting-value">S</span></div>
+        <div class="setting-row"><span class="setting-label">Move Right</span><span class="setting-value">D</span></div>
+        <div class="setting-row"><span class="setting-label">Jump</span><span class="setting-value">Space</span></div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-group-title">Camera</div>
+        <div class="setting-row"><span class="setting-label">Rotate Camera</span><span class="setting-value">Right Mouse / Drag</span></div>
+        <div class="setting-row"><span class="setting-label">Zoom In/Out</span><span class="setting-value">Scroll Wheel</span></div>
+        <div class="setting-row"><span class="setting-label">First Person</span><span class="setting-value">I</span></div>
+        <div class="setting-row"><span class="setting-label">Third Person</span><span class="setting-value">O</span></div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-group-title">Interface</div>
+        <div class="setting-row"><span class="setting-label">Chat</span><span class="setting-value">/</span></div>
+        <div class="setting-row"><span class="setting-label">Player List</span><span class="setting-value">Tab</span></div>
+        <div class="setting-row"><span class="setting-label">Pause Menu</span><span class="setting-value">Esc</span></div>
+      </div>
+    </div>
+    <div class="pause-section" id="tab-about">
+      <div class="setting-group">
+        <div class="setting-group-title">Blox Engine</div>
+        <div class="setting-row"><span class="setting-label">Version</span><span class="setting-value">2.1.0</span></div>
+        <div class="setting-row"><span class="setting-label">Renderer</span><span class="setting-value">Three.js WebGL</span></div>
+        <div class="setting-row"><span class="setting-label">Physics</span><span class="setting-value">Custom AABB</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ============================================================
+// BLOX ENGINE v2.1 — Refined Roblox-style Logic
+// ============================================================
+
+const STATE = {
+  paused: false,
+  chatOpen: false,
+  playerListOpen: false,
+  shiftLock: false,
+  cameraMode: 'third',
+  cameraDist: 10,
+  cameraMinDist: 2,
+  cameraMaxDist: 20,
+  cameraYaw: 0,
+  cameraPitch: -0.35,
+  sensitivity: 0.005,
+  fov: 70,
+  showFps: true,
+  masterVolume: 80,
+  shadowsEnabled: true,
+  playerName: 'Player' + Math.floor(Math.random() * 9999),
+  gravity: -40,
+  jumpForce: 22,
+  moveSpeed: 18,
+  isGrounded: false,
+  velocityY: 0,
+  health: 100,
+};
+
+const keys = {};
+let mouseDown = false;
+let lastTime = performance.now();
+let frameCount = 0;
+let fpsDisplay = 0;
+
+// ---- THREE.JS SETUP ----
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+scene.fog = new THREE.Fog(0x87CEEB, 120, 500);
+
+const camera = new THREE.PerspectiveCamera(STATE.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = STATE.shadowsEnabled;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// ---- LIGHTING ----
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xffeedd, 1.4);
+sunLight.position.set(80, 120, 60);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 300;
+sunLight.shadow.camera.left = -80;
+sunLight.shadow.camera.right = 80;
+sunLight.shadow.camera.top = 80;
+sunLight.shadow.camera.bottom = -80;
+scene.add(sunLight);
+
+const hemiLight = new THREE.HemisphereLight(0xb0d8ff, 0x888855, 0.35);
+scene.add(hemiLight);
+
+// ---- CLASSIC ROBLOX GREY BASEPLATE ----
+const baseplateSize = 512;
+const baseplateGeo = new THREE.BoxGeometry(baseplateSize, 2.4, baseplateSize);
+const baseplateMat = new THREE.MeshStandardMaterial({
+  color: 0x638375,
+  roughness: 0.9,
+  metalness: 0.0
+});
+const baseplate = new THREE.Mesh(baseplateGeo, baseplateMat);
+baseplate.position.y = -1.2;
+baseplate.receiveShadow = true;
+scene.add(baseplate);
+
+const gridHelper = new THREE.GridHelper(baseplateSize, baseplateSize / 4, 0x4a6155, 0x4a6155);
+gridHelper.position.y = 0.01;
+gridHelper.material.opacity = 0.18;
+gridHelper.material.transparent = true;
+scene.add(gridHelper);
+
+const sunGeo = new THREE.SphereGeometry(10, 16, 16);
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xffee88 });
+const sun = new THREE.Mesh(sunGeo, sunMat);
+sun.position.set(200, 250, 100);
+scene.add(sun);
+
+function addBox(x, y, z, w, h, d, color) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.65 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+const colliders = [];
+const spawnPlat = addBox(0, 0.2, 0, 14, 0.6, 14, 0x888888);
+
+// ---- R6 CHARACTER RIG ----
+class R6Character {
+  constructor(isPlayer = true, torsoColor = 0xAAAAAA) {
+    this.group = new THREE.Group();
+    this.isPlayer = isPlayer;
+    this.animTime = 0;
+    this.walkCycle = 0;
+    this.isWalking = false;
+    this.isJumping = false;
+
+    const grey = 0xAAAAAA;
+    const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
+
+    this.head = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), mat(grey));
+    this.head.position.y = 3.1;
+    this.head.castShadow = true;
+
+    const faceDark = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const eyeGeo = new THREE.BoxGeometry(0.24, 0.16, 0.05);
+    const leftEye = new THREE.Mesh(eyeGeo, faceDark);
+    leftEye.position.set(-0.25, 0.12, 0.63);
+    const rightEye = new THREE.Mesh(eyeGeo, faceDark);
+    rightEye.position.set(0.25, 0.12, 0.63);
+    this.head.add(leftEye, rightEye);
+
+    const smileData = [
+      { x: -0.24, y: -0.09, rz:  0.55, w: 0.10, h: 0.065 },
+      { x: -0.12, y: -0.16, rz:  0.20, w: 0.09, h: 0.065 },
+      { x:  0.00, y: -0.19, rz:  0.00, w: 0.14, h: 0.065 },
+      { x:  0.12, y: -0.16, rz: -0.20, w: 0.09, h: 0.065 },
+      { x:  0.24, y: -0.09, rz: -0.55, w: 0.10, h: 0.065 },
+    ];
+    smileData.forEach(s => {
+      const sg = new THREE.BoxGeometry(s.w, s.h, 0.05);
+      const sm = new THREE.Mesh(sg, faceDark);
+      sm.position.set(s.x, s.y, 0.63);
+      sm.rotation.z = s.rz;
+      this.head.add(sm);
+    });
+
+    this.torso = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.6, 0.9), mat(torsoColor));
+    this.torso.position.y = 2.0;
+    this.torso.castShadow = true;
+
+    this.leftArm = new THREE.Group();
+    const lArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.5, 0.6), mat(grey));
+    lArmMesh.position.y = -0.75;
+    lArmMesh.castShadow = true;
+    this.leftArm.add(lArmMesh);
+    this.leftArm.position.set(-1.0, 2.65, 0);
+
+    this.rightArm = new THREE.Group();
+    const rArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.5, 0.6), mat(grey));
+    rArmMesh.position.y = -0.75;
+    rArmMesh.castShadow = true;
+    this.rightArm.add(rArmMesh);
+    this.rightArm.position.set(1.0, 2.65, 0);
+
+    this.leftLeg = new THREE.Group();
+    const lLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.5, 0.6), mat(grey));
+    lLegMesh.position.y = -0.75;
+    lLegMesh.castShadow = true;
+    this.leftLeg.add(lLegMesh);
+    this.leftLeg.position.set(-0.35, 1.2, 0);
+
+    this.rightLeg = new THREE.Group();
+    const rLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.5, 0.6), mat(grey));
+    rLegMesh.position.y = -0.75;
+    rLegMesh.castShadow = true;
+    this.rightLeg.add(rLegMesh);
+    this.rightLeg.position.set(0.35, 1.2, 0);
+
+    this.group.add(this.head, this.torso, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+    scene.add(this.group);
+  }
+
+  animate(dt, isWalking, isJumping, speed, velY) {
+    this.animTime += dt;
+    if (isJumping) {
+      if (velY > 0) {
+        this.leftArm.rotation.x  = lerpAngle(this.leftArm.rotation.x,  -0.7, dt * 12);
+        this.rightArm.rotation.x = lerpAngle(this.rightArm.rotation.x, -0.7, dt * 12);
+        this.leftLeg.rotation.x  = lerpAngle(this.leftLeg.rotation.x,   0.25, dt * 10);
+        this.rightLeg.rotation.x = lerpAngle(this.rightLeg.rotation.x,  0.25, dt * 10);
+      } else {
+        this.leftArm.rotation.x  = lerpAngle(this.leftArm.rotation.x,   0.45, dt * 8);
+        this.rightArm.rotation.x = lerpAngle(this.rightArm.rotation.x,  0.45, dt * 8);
+      }
+      this.torso.position.y = 2.0;
+      this.head.position.y  = 3.1;
+    } else if (isWalking) {
+      this.walkCycle += dt * 8.5;
+      const swing = Math.sin(this.walkCycle);
+      this.leftLeg.rotation.x  = swing * 0.72;
+      this.rightLeg.rotation.x = -swing * 0.72;
+      this.leftArm.rotation.x  = -swing * 0.62;
+      this.rightArm.rotation.x  = swing * 0.62;
+      const bob = Math.abs(Math.sin(this.walkCycle)) * 0.09;
+      this.torso.position.y = 2.0 + bob;
+      this.head.position.y  = 3.1 + bob;
+    } else {
+      const breathe = Math.sin(this.animTime * 1.8) * 0.018;
+      this.leftArm.rotation.x  *= 0.88;
+      this.rightArm.rotation.x *= 0.88;
+      this.leftLeg.rotation.x  *= 0.88;
+      this.rightLeg.rotation.x *= 0.88;
+      this.torso.position.y = 2.0 + breathe;
+      this.head.position.y  = 3.1 + breathe;
+    }
+  }
+
+  setHeadRotation(pitch) {
+    this.head.rotation.x = pitch * 0.45;
+  }
+}
+
+function lerpAngle(a, b, t) { return a + (b - a) * Math.min(t, 1); }
+
+// ---- PLAYER ----
+const player = new R6Character(true, 0xAAAAAA);
+player.group.position.set(0, 0, 0);
+const playerPos = player.group.position;
+const playerVel = new THREE.Vector3(0, 0, 0);
+const PLAYER_HEIGHT = 4.5;
+const PLAYER_RADIUS = 0.65;
+
+// ---- NPC ----
+const npc = new R6Character(false, 0xCC3333);
+npc.group.position.set(10, 0, -8);
+
+function createNameplate(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.roundRect(4, 12, 248, 44, 8); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 22px Arial';
+  ctx.textAlign = 'center'; ctx.fillText(text, 128, 44);
+  const tex = new THREE.CanvasTexture(canvas);
+  const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(3.2, 0.8, 1); sprite.position.y = 4.8;
+  return sprite;
+}
+npc.group.add(createNameplate('Bob'));
+
+const npcCollider = {
+  getMin: () => new THREE.Vector3(npc.group.position.x - 0.7, npc.group.position.y, npc.group.position.z - 0.7),
+  getMax: () => new THREE.Vector3(npc.group.position.x + 0.7, npc.group.position.y + PLAYER_HEIGHT, npc.group.position.z + 0.7)
+};
+
+// ---- CAMERA ----
+const cameraTarget = new THREE.Vector3();
+function updateCamera() {
+  const headY = playerPos.y + 3.2;
+  cameraTarget.set(playerPos.x, headY, playerPos.z);
+  if (STATE.cameraMode === 'first') {
+    const dir = new THREE.Vector3(
+      Math.sin(STATE.cameraYaw) * Math.cos(STATE.cameraPitch),
+      Math.sin(STATE.cameraPitch),
+      Math.cos(STATE.cameraYaw) * Math.cos(STATE.cameraPitch)
+    );
+    camera.position.copy(cameraTarget);
+    camera.lookAt(cameraTarget.clone().add(dir));
+    player.group.visible = false;
+    document.getElementById('crosshair').style.display = 'block';
+  } else {
+    player.group.visible = true;
+    const offset = new THREE.Vector3(
+      -Math.sin(STATE.cameraYaw) * Math.cos(STATE.cameraPitch) * STATE.cameraDist,
+      -Math.sin(STATE.cameraPitch) * STATE.cameraDist,
+      -Math.cos(STATE.cameraYaw) * Math.cos(STATE.cameraPitch) * STATE.cameraDist
+    );
+    camera.position.copy(cameraTarget).add(offset);
+    camera.lookAt(cameraTarget);
+    document.getElementById('crosshair').style.display = STATE.shiftLock ? 'block' : 'none';
+  }
+}
+
+// ---- COLLISION ----
+function checkAABBCollision(posX, posY, posZ) {
+  const pMin = new THREE.Vector3(posX - PLAYER_RADIUS, posY, posZ - PLAYER_RADIUS);
+  const pMax = new THREE.Vector3(posX + PLAYER_RADIUS, posY + PLAYER_HEIGHT, posZ + PLAYER_RADIUS);
+  let corrected = { x: posX, y: posY, z: posZ, grounded: false };
+
+  const halfBase = baseplateSize / 2;
+  if (posX > -halfBase && posX < halfBase && posZ > -halfBase && posZ < halfBase) {
+    if (posY < 0) { corrected.y = 0; corrected.grounded = true; }
+  } else if (posY < -60) {
+      corrected.x = 0; corrected.y = 10; corrected.z = 0;
+      playerVel.y = 0;
+      addChatMsg('System', 'You fell off the map! Respawned.', true);
+  }
+
+  for (const col of colliders) {
+    const cMin = col.min, cMax = col.max;
+    if (pMax.x > cMin.x && pMin.x < cMax.x && pMax.y > cMin.y && pMin.y < cMax.y && pMax.z > cMin.z && pMin.z < cMax.z) {
+      const ox1 = pMax.x - cMin.x, ox2 = cMax.x - pMin.x, oy1 = pMax.y - cMin.y, oy2 = cMax.y - pMin.y, oz1 = pMax.z - cMin.z, oz2 = cMax.z - pMin.z;
+      const mox = Math.min(ox1, ox2), moy = Math.min(oy1, oy2), moz = Math.min(oz1, oz2);
+      if (moy < mox && moy < moz) {
+        if (oy1 < oy2) { corrected.y = cMin.y - PLAYER_HEIGHT; if (playerVel.y > 0) playerVel.y = 0; }
+        else { corrected.y = cMax.y; corrected.grounded = true; }
+      } else if (mox < moz) { corrected.x = ox1 < ox2 ? cMin.x - PLAYER_RADIUS : cMax.x + PLAYER_RADIUS; }
+      else { corrected.z = oz1 < oz2 ? cMin.z - PLAYER_RADIUS : cMax.z + PLAYER_RADIUS; }
+    }
+  }
+
+  const nMin = npcCollider.getMin(), nMax = npcCollider.getMax();
+  const upMin = new THREE.Vector3(corrected.x - PLAYER_RADIUS, corrected.y, corrected.z - PLAYER_RADIUS);
+  const upMax = new THREE.Vector3(corrected.x + PLAYER_RADIUS, corrected.y + PLAYER_HEIGHT, corrected.z + PLAYER_RADIUS);
+  if (upMax.x > nMin.x && upMin.x < nMax.x && upMax.y > nMin.y && upMin.y < nMax.y && upMax.z > nMin.z && upMin.z < nMax.z) {
+    const dx = corrected.x - npc.group.position.x, dz = corrected.z - npc.group.position.z, dist = Math.sqrt(dx*dx + dz*dz) || 0.01;
+    corrected.x = npc.group.position.x + (dx / dist) * (PLAYER_RADIUS + 0.72);
+    corrected.z = npc.group.position.z + (dz / dist) * (PLAYER_RADIUS + 0.72);
+  }
+  return corrected;
+}
+
+// ---- PLAYER MOVEMENT ----
+function updatePlayer(dt) {
+  if (STATE.paused || STATE.chatOpen) return;
+  let moveX = 0, moveZ = 0;
+  if (keys['KeyW'] || keys['ArrowUp'])    moveZ -= 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  moveZ += 1;
+  if (keys['KeyA'] || keys['ArrowLeft'])  moveX -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+
+  const sinYaw = Math.sin(STATE.cameraYaw), cosYaw = Math.cos(STATE.cameraYaw);
+  const forward = new THREE.Vector3(sinYaw, 0, cosYaw);
+  const right = new THREE.Vector3(cosYaw, 0, -sinYaw);
+  const moveDir = new THREE.Vector3();
+  moveDir.addScaledVector(forward, -moveZ);
+  moveDir.addScaledVector(right, -moveX);
+  if (moveDir.length() > 0) moveDir.normalize();
+
+  if (keys['Space'] && STATE.isGrounded) {
+    playerVel.y = STATE.jumpForce;
+    STATE.isGrounded = false;
+  }
+
+  playerVel.y += STATE.gravity * dt;
+  const result = checkAABBCollision(playerPos.x + moveDir.x * STATE.moveSpeed * dt, playerPos.y + playerVel.y * dt, playerPos.z + moveDir.z * STATE.moveSpeed * dt);
+  playerPos.copy(result);
+  if (result.grounded) { playerVel.y = 0; STATE.isGrounded = true; } else { STATE.isGrounded = false; }
+
+  if (STATE.shiftLock || STATE.cameraMode === 'first') {
+    player.group.rotation.y = STATE.cameraYaw; 
+  } else if (moveDir.length() > 0) {
+    const targetAngle = Math.atan2(moveDir.x, moveDir.z);
+    let diff = targetAngle - player.group.rotation.y;
+    while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+    player.group.rotation.y += diff * 12 * dt;
+  }
+  player.animate(dt, moveDir.length() > 0, !STATE.isGrounded, STATE.moveSpeed / 16, playerVel.y);
+  player.setHeadRotation(STATE.cameraPitch);
+}
+
+// ---- NPC AI ----
+let npcTimer = 0; let npcWalkDir = new THREE.Vector3(1, 0, 0);
+function updateNPC(dt) {
+  npcTimer += dt; if (npcTimer > 3.5) { npcTimer = 0; npcWalkDir = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(); }
+  npc.group.position.x += npcWalkDir.x * 3.5 * dt; npc.group.position.z += npcWalkDir.z * 3.5 * dt;
+  npc.group.position.x = Math.max(-50, Math.min(50, npc.group.position.x)); npc.group.position.z = Math.max(-50, Math.min(50, npc.group.position.z));
+  npc.group.rotation.y = Math.atan2(npcWalkDir.x, npcWalkDir.z) + Math.PI; npc.animate(dt, true, false, 1, 0);
+}
+
+// ---- INPUT ----
+document.addEventListener('keydown', (e) => {
+  keys[e.code] = true;
+  if (e.code === 'Slash' && !STATE.chatOpen && !STATE.paused) { e.preventDefault(); openChat(); return; }
+  if (e.code === 'Enter' && STATE.chatOpen) { sendChat(); return; }
+  if (e.code === 'Escape') { if (STATE.chatOpen) { closeChat(); return; } togglePause(); return; }
+  if (e.code === 'Tab') { e.preventDefault(); if (!STATE.paused) { STATE.playerListOpen = true; document.getElementById('player-list').style.display = 'block'; } }
+  if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !STATE.chatOpen && !STATE.paused) { STATE.shiftLock = !STATE.shiftLock; document.getElementById('shift-lock-icon').classList.toggle('active', STATE.shiftLock); }
+  if (e.code === 'KeyI' && !STATE.chatOpen) setCameraMode('first'); if (e.code === 'KeyO' && !STATE.chatOpen) setCameraMode('third');
+});
+document.addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Tab') { STATE.playerListOpen = false; document.getElementById('player-list').style.display = 'none'; } });
+
+renderer.domElement.addEventListener('mousedown', (e) => { if (e.button === 2 || e.button === 0) { mouseDown = true; if (!STATE.paused && !STATE.chatOpen) renderer.domElement.requestPointerLock(); } });
+renderer.domElement.addEventListener('mouseup', () => { mouseDown = false; if (!STATE.shiftLock && STATE.cameraMode !== 'first') document.exitPointerLock(); });
+
+document.addEventListener('mousemove', (e) => {
+  if (STATE.paused || STATE.chatOpen) return;
+  if (document.pointerLockElement === renderer.domElement || STATE.shiftLock || STATE.cameraMode === 'first') {
+    STATE.cameraYaw -= e.movementX * STATE.sensitivity;
+    STATE.cameraPitch -= e.movementY * STATE.sensitivity;
+    STATE.cameraPitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.5, STATE.cameraPitch));
+  }
+});
+
+renderer.domElement.addEventListener('wheel', (e) => {
+  if (STATE.paused || STATE.cameraMode === 'first') return;
+  STATE.cameraDist = Math.max(STATE.cameraMinDist, Math.min(STATE.cameraMaxDist, STATE.cameraDist + e.deltaY * 0.012));
+  document.getElementById('zoom-slider').value = STATE.cameraDist; 
+  document.getElementById('zoom-value').textContent = Math.round(STATE.cameraDist * 10) / 10;
+});
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+// ---- CHAT & UI FUNCTIONS ----
+function openChat() { STATE.chatOpen = true; document.getElementById('chat-input-row').style.display = 'flex'; document.getElementById('chat-hint-bar').style.display = 'none'; document.getElementById('chat-input').focus(); document.exitPointerLock(); }
+function closeChat() { STATE.chatOpen = false; document.getElementById('chat-input-row').style.display = 'none'; document.getElementById('chat-hint-bar').style.display = 'block'; document.getElementById('chat-input').value = ''; }
+function sendChat() { const input = document.getElementById('chat-input'); const msg = input.value.trim(); if (msg) { addChatMsg(STATE.playerName, msg); } closeChat(); }
+function addChatMsg(name, text, isSystem = false) {
+  const log = document.getElementById('chat-log'); const div = document.createElement('div'); div.className = 'chat-msg' + (isSystem ? ' system' : '');
+  if (isSystem) { div.textContent = text; } else { div.innerHTML = `<span class="username" style="color:${name === STATE.playerName ? '#00d4ff' : '#FFCC00'}">${name}: </span>${text}`; }
+  log.appendChild(div); if (log.children.length > 12) log.removeChild(log.firstChild);
+}
+function togglePause() { STATE.paused = !STATE.paused; document.getElementById('pause-overlay').style.display = STATE.paused ? 'block' : 'none'; document.getElementById('pause-menu').style.display = STATE.paused ? 'block' : 'none'; if (STATE.paused) document.exitPointerLock(); }
+document.getElementById('pause-close-btn').addEventListener('click', togglePause);
+document.getElementById('btn-resume').addEventListener('click', togglePause);
+
+function setCameraMode(mode) { STATE.cameraMode = mode; document.getElementById('camera-mode').textContent = mode === 'first' ? '1st Person' : '3rd Person'; document.getElementById('camera-mode-select').value = mode; }
+
+// ---- SETTINGS HANDLERS ----
+// Sensitivity slider
+document.getElementById('sensitivity-slider').addEventListener('input', (e) => { 
+  STATE.sensitivity = (e.target.value * 0.001); 
+  document.getElementById('sensitivity-value').textContent = e.target.value; 
+});
+
+// Camera mode dropdown
+document.getElementById('camera-mode-select').addEventListener('change', (e) => {
+  setCameraMode(e.target.value);
+});
+
+// Zoom distance slider
+document.getElementById('zoom-slider').addEventListener('input', (e) => { 
+  STATE.cameraDist = parseFloat(e.target.value); 
+  document.getElementById('zoom-value').textContent = Math.round(e.target.value * 10) / 10; 
+});
+
+// Shadows toggle
+document.getElementById('toggle-shadows').addEventListener('click', function() {
+  STATE.shadowsEnabled = !STATE.shadowsEnabled;
+  this.classList.toggle('on', STATE.shadowsEnabled);
+  renderer.shadowMap.enabled = STATE.shadowsEnabled;
+  sunLight.castShadow = STATE.shadowsEnabled;
+});
+
+// FPS display toggle
+document.getElementById('toggle-fps').addEventListener('click', function() {
+  STATE.showFps = !STATE.showFps;
+  this.classList.toggle('on', STATE.showFps);
+  document.getElementById('fps-counter').style.display = STATE.showFps ? 'block' : 'none';
+});
+
+// Field of View slider
+document.getElementById('fov-slider').addEventListener('input', (e) => { 
+  STATE.fov = parseInt(e.target.value);
+  camera.fov = STATE.fov;
+  camera.updateProjectionMatrix();
+  document.getElementById('fov-value').textContent = e.target.value; 
+});
+
+// Master volume slider
+document.getElementById('volume-slider').addEventListener('input', (e) => { 
+  STATE.masterVolume = parseInt(e.target.value);
+  document.getElementById('volume-value').textContent = e.target.value; 
+});
+
+// Leave game button
+document.getElementById('btn-leave').addEventListener('click', () => {
+  if (confirm('Are you sure you want to leave the game?')) {
+    window.location.href = '/';
+  }
+});
+
+// Settings tab switching
+document.querySelectorAll('.pause-tab').forEach(tab => {
+  tab.addEventListener('click', (e) => {
+    const tabName = e.target.getAttribute('data-tab');
+    
+    // Remove active class from all tabs and sections
+    document.querySelectorAll('.pause-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.pause-section').forEach(s => s.classList.remove('active'));
+    
+    // Add active class to clicked tab and corresponding section
+    e.target.classList.add('active');
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+  });
+});
+
+// Initialize username display
+document.getElementById('username-display').textContent = STATE.playerName;
+
+// Initialize settings values
+document.getElementById('sensitivity-value').textContent = '5';
+document.getElementById('zoom-value').textContent = '10';
+document.getElementById('fov-value').textContent = '70';
+document.getElementById('volume-value').textContent = '80';
+
+// ---- INITIALIZATION ----
+(function buildToolbar() {
+  const toolbar = document.getElementById('toolbar');
+  for (let i = 1; i <= 9; i++) {
+    const slot = document.createElement('div'); slot.className = 'toolbar-slot';
+    slot.innerHTML = `<span class="slot-num">${i}</span>`; toolbar.appendChild(slot);
+  }
+})();
+
+function simulateLoading() {
+  const fill = document.getElementById('loading-fill'); const text = document.getElementById('loading-text');
+  const steps = [{ pct: 15, msg: 'Loading world...' }, { pct: 55, msg: 'Spawning characters...' }, { pct: 100, msg: 'Ready!' }];
+  let i = 0; const interval = setInterval(() => {
+    if (i < steps.length) { fill.style.width = steps[i].pct + '%'; text.textContent = steps[i].msg; i++; } else {
+      clearInterval(interval); setTimeout(() => {
+        document.getElementById('loading-screen').style.opacity = '0';
+        setTimeout(() => {
+          document.getElementById('loading-screen').style.display = 'none';
+          document.getElementById('health-bar-container').style.display = 'block';
+          addChatMsg('System', 'Welcome to Blox Engine!', true);
+        }, 500);
+      }, 400);
+    }
+  }, 480);
+}
+
+// ---- FPS COUNTER ----
+let lastFpsUpdate = 0;
+function updateFPS(dt) {
+  frameCount++;
+  lastFpsUpdate += dt;
+  if (lastFpsUpdate >= 0.25) {
+    fpsDisplay = Math.round(frameCount / lastFpsUpdate);
+    if (STATE.showFps) {
+      document.getElementById('fps-counter').textContent = fpsDisplay + ' FPS';
+    }
+    frameCount = 0;
+    lastFpsUpdate = 0;
+  }
+}
+
+// ---- MAIN LOOP ----
+const clock = new THREE.Clock();
+function gameLoop() {
+  requestAnimationFrame(gameLoop);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  updateFPS(dt);
+  updatePlayer(dt);
+  updateNPC(dt);
+  updateCamera();
+  renderer.render(scene, camera);
+}
+
+simulateLoading();
+gameLoop();
+</script>
+</body>
+</html>
